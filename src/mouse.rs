@@ -1,7 +1,10 @@
 #![allow(unused_mut, dead_code, unused_variables)]
 
-use bevy::input::mouse::MouseButtonInput;
-use bevy::input::ElementState;
+use crate::{
+	fit_to_grid, vec2_to_position, Cell, CellContent, Game, Graph, NewPathEvent, WINDOW_HEIGHT,
+	WINDOW_WIDTH,
+};
+use bevy::input::{mouse::MouseButtonInput, ElementState};
 use bevy::prelude::*;
 
 pub struct MouseState {
@@ -50,5 +53,55 @@ pub fn handle_mouse_events(
 			state.pressed_read = false;
 			state.pressed = change;
 		}
+	}
+}
+
+pub fn handle_click(
+	mut commands: Commands,
+	mut mouse: ResMut<MouseState>,
+	game: Res<Game>,
+	mut graph: ResMut<Graph>,
+	mut cells: Query<(&mut Cell,)>,
+	mut new_path: EventWriter<NewPathEvent>,
+) {
+	if mouse.pressed && !mouse.pressed_read {
+		mouse.pressed_read = true;
+		if let Some((x, y)) = fit_to_grid(vec2_to_position(mouse.position)) {
+			let entity = game.grid[y][x];
+			if let Ok((mut cell,)) = cells.get_mut(entity) {
+				if cell.content == CellContent::Empty {
+					cell.content = CellContent::Rock;
+					graph.set_node_walkability(cell.node_id, false);
+				} else {
+					return;
+				}
+
+				if let Some(path) = graph.bfs() {
+					new_path.send(NewPathEvent(path));
+				} else {
+					cell.content = CellContent::Empty;
+					graph.set_node_walkability(cell.node_id, true);
+					println!("reset {}", cell.node_id);
+				}
+			}
+		}
+	}
+}
+
+pub fn init_mouse(mut windows: ResMut<Windows>) {
+	windows
+		.get_primary_mut()
+		.unwrap()
+		.set_cursor_lock_mode(true);
+}
+
+pub struct MousePlugin;
+
+impl Plugin for MousePlugin {
+	fn build(&self, app: &mut App) {
+		app.insert_resource(MouseState::new(WINDOW_WIDTH, WINDOW_HEIGHT))
+			.add_startup_system(init_mouse)
+			.add_system(handle_mouse_events)
+			.add_system(handle_click);
 	}
 }

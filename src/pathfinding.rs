@@ -1,7 +1,6 @@
 use crate::Game;
 use bevy::prelude::*;
-use std::collections::HashMap;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Eq, PartialEq, Hash, Copy)]
