@@ -122,8 +122,6 @@ fn init_mouse(mut windows: ResMut<Windows>) {
         .set_cursor_lock_mode(true);
 }
 
-struct NewPathEvent(Vec<NodeId>);
-
 fn handle_click(
     mut commands: Commands,
     mut mouse: ResMut<MouseState>,
@@ -143,100 +141,38 @@ fn handle_click(
                 } else {
                     return;
                 }
-            }
-            if let Some(path) = graph.bfs() {
-                println!("werks: {:?}", path);
-                new_path.send(NewPathEvent(path));
-            } else {
-                let (mut cell,) = cells.get_mut(entity).unwrap();
-                cell.content = CellContent::Empty;
-                graph.set_node_walkability(cell.node_id, true);
+
+                if let Some(path) = graph.bfs() {
+                    new_path.send(NewPathEvent(path));
+                } else {
+                    cell.content = CellContent::Empty;
+                    graph.set_node_walkability(cell.node_id, true);
+                    println!("reset {}", cell.node_id);
+                }
             }
         }
     }
-}
-
-fn update_path(
-    mut commands: Commands,
-    mut new_path: EventReader<NewPathEvent>,
-    graph: Res<Graph>,
-    game: Res<Game>,
-    mut query: Query<&mut Sprite>,
-) {
-    for event in new_path.iter() {
-        for (mut sprite) in query.iter_mut() {
-            if sprite.color == Color::PURPLE {
-                sprite.color = Color::BLACK;
-            }
-        }
-        for node_id in event.0.iter() {
-            let (x, y) = graph.get_node_coordinates(*node_id).unwrap();
-            let mut sprite = query.get_mut(game.grid[y][x]).unwrap();
-            sprite.color = Color::PURPLE;
-        }
-    }
-}
-
-#[derive(Component)]
-struct Debugger;
-
-fn debug_mouse(
-    mut commands: Commands,
-    mouse: Res<MouseState>,
-    mut debugger: Query<(&mut Transform, &mut Sprite), With<Debugger>>,
-) {
-    if debugger.is_empty() {
-        commands
-            .spawn_bundle(SpriteBundle {
-                sprite: Sprite {
-                    color: Color::YELLOW,
-                    custom_size: Some(Vec2::new(100.0, 100.0)),
-                    ..Default::default()
-                },
-                transform: Transform::from_translation(Vec3::new(
-                    mouse.position.x,
-                    mouse.position.y,
-                    0.0,
-                )),
-                ..Default::default()
-            })
-            .insert(Debugger);
-        return;
-    }
-
-    let (mut transform, mut sprite) = debugger.get_single_mut().unwrap();
-
-    sprite.color = match mouse.pressed {
-        true => Color::YELLOW,
-        false => Color::PINK,
-    };
-
-    transform.translation.x = mouse.position.x;
-    transform.translation.y = mouse.position.y;
 }
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugin(PathfindingPlugin)
         .insert_resource(WindowDescriptor {
-            title: "Wordle".to_string(),
+            title: "GemTD".to_string(),
             width: WINDOW_WIDTH,
             height: WINDOW_HEIGHT,
             ..Default::default()
         })
         .insert_resource(ClearColor(Color::rgb(0.12, 0.12, 0.12)))
         .insert_resource(Game { grid: vec![] })
-        .insert_resource(Graph::default())
         .insert_resource(MouseState::new(WINDOW_WIDTH, WINDOW_HEIGHT))
         .add_startup_system(init_cameras)
         .add_startup_system(init_game)
         .add_startup_system(init_mouse)
-        .add_event::<NewPathEvent>()
         .add_system(handle_click)
         .add_system(handle_mouse_events)
-        .add_system(debug_mouse)
         .add_system(update_cell_sprites)
-        .add_system(update_path)
         .add_system(bevy::input::system::exit_on_esc_system)
         .run();
 }

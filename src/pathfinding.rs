@@ -1,3 +1,5 @@
+use crate::Game;
+use bevy::prelude::*;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
@@ -107,9 +109,8 @@ impl Graph {
    }
 
    pub fn set_node_walkability(&mut self, node_id: NodeId, walkable: bool) {
-      if let Some(node) = self.nodes.get_mut(&node_id) {
-         node.walkable = false;
-      }
+      let mut node = self.nodes.get_mut(&node_id).unwrap();
+      node.walkable = walkable;
    }
 
    pub fn is_walkable(&self, node_id: NodeId) -> bool {
@@ -147,6 +148,7 @@ impl Graph {
          if let Some(origin) = came_from.get(&current) {
             current = origin.unwrap();
          } else {
+            println!("No path");
             return None;
          }
       }
@@ -156,5 +158,38 @@ impl Graph {
 
    pub fn get_node_coordinates(&self, node_id: NodeId) -> Option<(usize, usize)> {
       self.nodes.get(&node_id).map(|node| (node.x, node.y))
+   }
+}
+
+fn update_path(
+   mut commands: Commands,
+   mut new_path: EventReader<NewPathEvent>,
+   graph: Res<Graph>,
+   game: Res<Game>,
+   mut query: Query<&mut Sprite>,
+) {
+   for event in new_path.iter() {
+      for (mut sprite) in query.iter_mut() {
+         if sprite.color == Color::PURPLE {
+            sprite.color = Color::BLACK;
+         }
+      }
+      for node_id in event.0.iter() {
+         let (x, y) = graph.get_node_coordinates(*node_id).unwrap();
+         let mut sprite = query.get_mut(game.grid[y][x]).unwrap();
+         sprite.color = Color::PURPLE;
+      }
+   }
+}
+
+pub struct NewPathEvent(pub Vec<NodeId>);
+
+pub struct PathfindingPlugin;
+
+impl Plugin for PathfindingPlugin {
+   fn build(&self, app: &mut App) {
+      app.insert_resource(Graph::default())
+         .add_event::<NewPathEvent>()
+         .add_system(update_path);
    }
 }
