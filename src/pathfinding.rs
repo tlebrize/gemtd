@@ -1,4 +1,4 @@
-use crate::Game;
+use crate::{AppState, Game};
 use bevy::prelude::*;
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -11,16 +11,16 @@ pub enum Direction {
    East,
 }
 
-impl Direction {
-   fn opposite(&self) -> Self {
-      match self {
-         Self::North => Self::South,
-         Self::South => Self::North,
-         Self::East => Self::West,
-         Self::West => Self::East,
-      }
-   }
-}
+// impl Direction {
+//    fn opposite(&self) -> Self {
+//       match self {
+//          Self::North => Self::South,
+//          Self::South => Self::North,
+//          Self::East => Self::West,
+//          Self::West => Self::East,
+//       }
+//    }
+// }
 
 pub type NodeId = u32;
 
@@ -56,7 +56,7 @@ pub struct Graph {
 }
 
 impl Graph {
-   pub fn get_neighbors(&self, id: NodeId) -> HashMap<Direction, NodeId> {
+   fn get_neighbors(&self, id: NodeId) -> HashMap<Direction, NodeId> {
       let mut neighbors = HashMap::new();
       for direction in vec![
          Direction::North,
@@ -76,7 +76,7 @@ impl Graph {
    pub fn add(&mut self, walkable: bool, x: usize, y: usize) -> NodeId {
       self.counter += 1;
       let id = self.counter;
-      let mut node = Node { walkable, x, y, id };
+      let node = Node { walkable, x, y, id };
       self.positions.insert((x, y), id);
 
       if x > 0 {
@@ -112,7 +112,7 @@ impl Graph {
       node.walkable = walkable;
    }
 
-   pub fn is_walkable(&self, node_id: NodeId) -> bool {
+   fn is_walkable(&self, node_id: NodeId) -> bool {
       if let Some(node) = self.nodes.get(&node_id) {
          node.walkable
       } else {
@@ -160,15 +160,14 @@ impl Graph {
    }
 }
 
-fn update_path(
-   mut commands: Commands,
+fn new_path_event_handle(
    mut new_path: EventReader<NewPathEvent>,
    graph: Res<Graph>,
    game: Res<Game>,
    mut query: Query<&mut Sprite>,
 ) {
    for event in new_path.iter() {
-      for (mut sprite) in query.iter_mut() {
+      for mut sprite in query.iter_mut() {
          if sprite.color == Color::PURPLE {
             sprite.color = Color::BLACK;
          }
@@ -189,6 +188,8 @@ impl Plugin for PathfindingPlugin {
    fn build(&self, app: &mut App) {
       app.insert_resource(Graph::default())
          .add_event::<NewPathEvent>()
-         .add_system(update_path);
+         .add_system_set(
+            SystemSet::on_update(AppState::BuildState).with_system(new_path_event_handle),
+         );
    }
 }

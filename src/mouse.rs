@@ -1,22 +1,22 @@
 #![allow(unused_mut, dead_code, unused_variables)]
 
 use crate::{
-	fit_to_grid, vec2_to_position, Cell, CellContent, Game, Graph, NewPathEvent, WINDOW_HEIGHT,
-	WINDOW_WIDTH,
+	fit_to_grid, vec2_to_position, AppState, Cell, CellContent, Game, Graph, NewPathEvent,
+	RockPlacedEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 use bevy::input::{mouse::MouseButtonInput, ElementState};
 use bevy::prelude::*;
 
-pub struct MouseState {
-	pub position: Vec2,
-	pub pressed: bool,
-	pub pressed_read: bool,
+struct MouseState {
+	position: Vec2,
+	pressed: bool,
+	pressed_read: bool,
 	width: f32,
 	height: f32,
 }
 
 impl MouseState {
-	pub fn new(width: f32, height: f32) -> Self {
+	fn new(width: f32, height: f32) -> Self {
 		MouseState {
 			position: Vec2::new(0.0, 0.0),
 			pressed: false,
@@ -26,13 +26,13 @@ impl MouseState {
 		}
 	}
 
-	pub fn update(&mut self, position: Vec2) {
+	fn update(&mut self, position: Vec2) {
 		self.position.x = position.x - (self.width / 2.0);
 		self.position.y = position.y - (self.height / 2.0);
 	}
 }
 
-pub fn handle_mouse_events(
+fn handle_mouse_events(
 	mut cursor_moved_events: EventReader<CursorMoved>,
 	mut mouse_button_input_events: EventReader<MouseButtonInput>,
 	mut state: ResMut<MouseState>,
@@ -56,13 +56,14 @@ pub fn handle_mouse_events(
 	}
 }
 
-pub fn handle_click(
+fn handle_build_click(
 	mut commands: Commands,
 	mut mouse: ResMut<MouseState>,
 	game: Res<Game>,
 	mut graph: ResMut<Graph>,
 	mut cells: Query<(&mut Cell,)>,
 	mut new_path: EventWriter<NewPathEvent>,
+	mut rock_placed: EventWriter<RockPlacedEvent>,
 ) {
 	if mouse.pressed && !mouse.pressed_read {
 		mouse.pressed_read = true;
@@ -78,17 +79,17 @@ pub fn handle_click(
 
 				if let Some(path) = graph.bfs() {
 					new_path.send(NewPathEvent(path));
+					rock_placed.send(RockPlacedEvent);
 				} else {
 					cell.content = CellContent::Empty;
 					graph.set_node_walkability(cell.node_id, true);
-					println!("reset {}", cell.node_id);
 				}
 			}
 		}
 	}
 }
 
-pub fn init_mouse(mut windows: ResMut<Windows>) {
+fn init_mouse(mut windows: ResMut<Windows>) {
 	windows
 		.get_primary_mut()
 		.unwrap()
@@ -102,6 +103,8 @@ impl Plugin for MousePlugin {
 		app.insert_resource(MouseState::new(WINDOW_WIDTH, WINDOW_HEIGHT))
 			.add_startup_system(init_mouse)
 			.add_system(handle_mouse_events)
-			.add_system(handle_click);
+			.add_system_set(
+				SystemSet::on_update(AppState::BuildState).with_system(handle_build_click),
+			);
 	}
 }

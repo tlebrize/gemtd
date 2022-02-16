@@ -1,4 +1,4 @@
-#![allow(unused_mut, dead_code, unused_variables, unused_parens)]
+// #![allow(unused_mut, dead_code, unused_variables, unused_parens)]
 use bevy::prelude::*;
 
 mod game;
@@ -9,6 +9,8 @@ mod pathfinding;
 use pathfinding::*;
 mod utils;
 use utils::*;
+mod enemies;
+use enemies::*;
 
 const GRID_SIZE: f32 = 16.0;
 const TILE_SIZE: f32 = 40.0;
@@ -19,6 +21,12 @@ const WINDOW_HEIGHT: f32 = 720.0;
 fn init_cameras(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(UiCameraBundle::default());
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+enum AppState {
+    BuildState,
+    EnemiesState,
 }
 
 struct MainPlugin;
@@ -32,6 +40,7 @@ impl Plugin for MainPlugin {
             ..Default::default()
         })
         .insert_resource(ClearColor(Color::rgb(0.12, 0.12, 0.12)))
+        .add_state(AppState::BuildState)
         .add_startup_system(init_cameras)
         .add_system(bevy::input::system::exit_on_esc_system);
     }
@@ -44,5 +53,6 @@ fn main() {
         .add_plugin(PathfindingPlugin)
         .add_plugin(MousePlugin)
         .add_plugin(GamePlugin)
+        .add_plugin(EnemiesPlugin)
         .run();
 }
