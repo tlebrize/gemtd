@@ -4,19 +4,20 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct Tile;
 
-#[derive(std::cmp::PartialEq, Clone)]
+#[derive(std::cmp::PartialEq, Clone, Debug)]
 pub enum CellContent {
 	Empty,
 	Limit,
 	Start,
 	End,
 	Rock,
+	Tower(Entity),
 }
 
 #[derive(Component)]
 pub struct Cell {
 	pub content: CellContent,
-	pub position: [usize; 2],
+	pub position: (usize, usize),
 	pub node_id: u32,
 }
 
@@ -24,9 +25,12 @@ pub struct Cell {
 pub struct Game {
 	pub grid: Vec<Vec<Entity>>,
 	pub rocks_count: u8,
+	pub lives: u8,
 }
 
 fn init_game(mut commands: Commands, mut game: ResMut<Game>, mut graph: ResMut<Graph>) {
+	game.lives = 10;
+
 	let size = GRID_SIZE as usize;
 	for y in 0..size {
 		game.grid.push(vec![]);
@@ -45,7 +49,7 @@ fn init_game(mut commands: Commands, mut game: ResMut<Game>, mut graph: ResMut<G
 
 			let cell = Cell {
 				content: content.clone(),
-				position: [x, y],
+				position: (x, y),
 				node_id,
 			};
 
@@ -75,11 +79,12 @@ fn init_game(mut commands: Commands, mut game: ResMut<Game>, mut graph: ResMut<G
 fn update_cell_sprites(mut query: Query<(&Cell, &mut Sprite)>) {
 	for (cell, mut sprite) in query.iter_mut() {
 		match cell.content {
-			CellContent::Empty => {}
 			CellContent::Limit => sprite.color = Color::WHITE,
 			CellContent::Start => sprite.color = Color::GREEN,
 			CellContent::End => sprite.color = Color::RED,
 			CellContent::Rock => sprite.color = Color::GRAY,
+			CellContent::Tower(_) => sprite.color = Color::GRAY,
+			_ => {}
 		}
 	}
 }
@@ -92,13 +97,14 @@ fn handle_new_rock_placed(
 	for _ in rock_placed.iter() {
 		game.rocks_count += 1;
 		if game.rocks_count >= 5 {
-			app_state.set(AppState::EnemiesState).unwrap();
-			println!("enemies");
+			app_state.set(AppState::Select).unwrap();
 		}
 	}
 }
 
-pub struct RockPlacedEvent;
+pub struct RockPlacedEvent {
+	pub entity: Entity,
+}
 
 pub struct GamePlugin;
 
@@ -109,7 +115,7 @@ impl Plugin for GamePlugin {
 			.add_startup_system(init_game)
 			.add_system(update_cell_sprites)
 			.add_system_set(
-				SystemSet::on_update(AppState::BuildState).with_system(handle_new_rock_placed),
+				SystemSet::on_update(AppState::Build).with_system(handle_new_rock_placed),
 			);
 	}
 }

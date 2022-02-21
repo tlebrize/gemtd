@@ -1,8 +1,6 @@
-#![allow(unused_mut, dead_code, unused_variables)]
-
 use crate::{
 	fit_to_grid, vec2_to_position, AppState, Cell, CellContent, Game, Graph, NewPathEvent,
-	RockPlacedEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
+	RockPlacedEvent, TemporaryTower, Tower, UpdateUIEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 use bevy::input::{mouse::MouseButtonInput, ElementState};
 use bevy::prelude::*;
@@ -56,12 +54,29 @@ fn handle_mouse_events(
 	}
 }
 
+fn handle_tooltip_hoover(
+	mouse: Res<MouseState>,
+	mut update_ui: EventWriter<UpdateUIEvent>,
+	game: Res<Game>,
+	cells: Query<&Cell>,
+) {
+	if let Some((x, y)) = fit_to_grid(vec2_to_position(mouse.position)) {
+		let entity = game.grid[y][x];
+		if let Ok(cell) = cells.get(entity) {
+			if let CellContent::Tower(_) = cell.content {
+				update_ui.send(UpdateUIEvent {
+					position: cell.position,
+				});
+			}
+		}
+	}
+}
+
 fn handle_build_click(
-	mut commands: Commands,
 	mut mouse: ResMut<MouseState>,
 	game: Res<Game>,
 	mut graph: ResMut<Graph>,
-	mut cells: Query<(&mut Cell,)>,
+	mut cells: Query<(Entity, &mut Cell)>,
 	mut new_path: EventWriter<NewPathEvent>,
 	mut rock_placed: EventWriter<RockPlacedEvent>,
 ) {
@@ -69,7 +84,7 @@ fn handle_build_click(
 		mouse.pressed_read = true;
 		if let Some((x, y)) = fit_to_grid(vec2_to_position(mouse.position)) {
 			let entity = game.grid[y][x];
-			if let Ok((mut cell,)) = cells.get_mut(entity) {
+			if let Ok((entity, mut cell)) = cells.get_mut(entity) {
 				if cell.content == CellContent::Empty {
 					cell.content = CellContent::Rock;
 					graph.set_node_walkability(cell.node_id, false);
@@ -77,13 +92,47 @@ fn handle_build_click(
 					return;
 				}
 
-				if let Some(path) = graph.bfs() {
-					new_path.send(NewPathEvent(path));
-					rock_placed.send(RockPlacedEvent);
+				if graph.bfs() {
+					new_path.send(NewPathEvent(graph.path.as_ref().unwrap().to_vec()));
+					rock_placed.send(RockPlacedEvent { entity });
 				} else {
 					cell.content = CellContent::Empty;
 					graph.set_node_walkability(cell.node_id, true);
 				}
+			}
+		}
+	}
+}
+
+fn handle_select_click(
+	mut commands: Commands,
+	mut mouse: ResMut<MouseState>,
+	game: Res<Game>,
+	mut temporary_towers: Query<(Entity, &Tower), With<TemporaryTower>>,
+	mut cells: Query<&mut Cell>,
+	mut app_state: ResMut<State<AppState>>,
+) {
+	if mouse.pressed && !mouse.pressed_read {
+		mouse.pressed_read = true;
+		let mut found = false;
+		if let Some((x, y)) = fit_to_grid(vec2_to_position(mouse.position)) {
+			for (_, tower) in temporary_towers.iter_mut() {
+				if tower.position == (x, y) {
+					found = true;
+				}
+			}
+
+			if found {
+				for (entity, tower) in temporary_towers.iter_mut() {
+					if tower.position == (x, y) {
+						commands.entity(entity).remove::<TemporaryTower>();
+					} else {
+						let (tx, ty) = tower.position;
+						cells.get_mut(game.grid[ty][tx]).unwrap().content = CellContent::Rock;
+						commands.entity(entity).despawn_recursive();
+					}
+				}
+				app_state.set(AppState::Enemies).unwrap();
 			}
 		}
 	}
@@ -103,8 +152,10 @@ impl Plugin for MousePlugin {
 		app.insert_resource(MouseState::new(WINDOW_WIDTH, WINDOW_HEIGHT))
 			.add_startup_system(init_mouse)
 			.add_system(handle_mouse_events)
+			.add_system(handle_tooltip_hoover)
+			.add_system_set(SystemSet::on_update(AppState::Build).with_system(handle_build_click))
 			.add_system_set(
-				SystemSet::on_update(AppState::BuildState).with_system(handle_build_click),
+				SystemSet::on_update(AppState::Select).with_system(handle_select_click),
 			);
 	}
 }

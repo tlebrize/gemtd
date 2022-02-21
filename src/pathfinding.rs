@@ -1,4 +1,4 @@
-use crate::{AppState, Game};
+use crate::Game;
 use bevy::prelude::*;
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -26,8 +26,7 @@ pub type NodeId = u32;
 
 pub struct Node {
    pub walkable: bool,
-   x: usize,
-   y: usize,
+   position: (usize, usize),
    id: NodeId,
 }
 
@@ -51,6 +50,7 @@ pub struct Graph {
    positions: HashMap<(usize, usize), NodeId>,
    neighbors: HashMap<(Direction, NodeId), NodeId>,
    counter: NodeId,
+   pub path: Option<Vec<NodeId>>,
    pub start: NodeId,
    pub end: NodeId,
 }
@@ -76,7 +76,11 @@ impl Graph {
    pub fn add(&mut self, walkable: bool, x: usize, y: usize) -> NodeId {
       self.counter += 1;
       let id = self.counter;
-      let node = Node { walkable, x, y, id };
+      let node = Node {
+         walkable,
+         position: (x, y),
+         id,
+      };
       self.positions.insert((x, y), id);
 
       if x > 0 {
@@ -120,7 +124,7 @@ impl Graph {
       }
    }
 
-   pub fn bfs(&self) -> Option<Vec<NodeId>> {
+   pub fn bfs(&mut self) -> bool {
       let mut frontier = VecDeque::new();
       let mut came_from = HashMap::new();
       frontier.push_back(self.start);
@@ -147,16 +151,25 @@ impl Graph {
          if let Some(origin) = came_from.get(&current) {
             current = origin.unwrap();
          } else {
-            println!("No path");
-            return None;
+            return false;
          }
       }
       path.push(self.start);
-      Some(path)
+      self.path = Some(path.into_iter().rev().collect());
+      true
    }
 
-   pub fn get_node_coordinates(&self, node_id: NodeId) -> Option<(usize, usize)> {
-      self.nodes.get(&node_id).map(|node| (node.x, node.y))
+   pub fn get_node_position(&self, node_id: NodeId) -> Option<(usize, usize)> {
+      self.nodes.get(&node_id).map(|node| node.position)
+   }
+
+   pub fn next_step(&self, index: usize) -> Option<(usize, usize)> {
+      let path = self.path.as_ref().unwrap();
+      if path.len() > index + 1 {
+         self.get_node_position(path[index + 1])
+      } else {
+         None
+      }
    }
 }
 
@@ -173,7 +186,7 @@ fn new_path_event_handle(
          }
       }
       for node_id in event.0.iter() {
-         let (x, y) = graph.get_node_coordinates(*node_id).unwrap();
+         let (x, y) = graph.get_node_position(*node_id).unwrap();
          let mut sprite = query.get_mut(game.grid[y][x]).unwrap();
          sprite.color = Color::PURPLE;
       }
@@ -188,8 +201,6 @@ impl Plugin for PathfindingPlugin {
    fn build(&self, app: &mut App) {
       app.insert_resource(Graph::default())
          .add_event::<NewPathEvent>()
-         .add_system_set(
-            SystemSet::on_update(AppState::BuildState).with_system(new_path_event_handle),
-         );
+         .add_system(new_path_event_handle);
    }
 }
