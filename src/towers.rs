@@ -1,12 +1,12 @@
 use crate::{
 	flat_distance, position_to_transform, AppState, Cell, CellContent, Cleave, RockPlacedEvent,
-	TowerAuras, TowerModifier, UpdateRangeIndicatorScaleEvent, UpdateUIEvent,
+	TowerAuras, TowerModifier, UpdateRangeIndicatorScaleEvent, UpdateTowerTooltipEvent,
 };
 use bevy::prelude::*;
 use bevy::utils::Duration;
 use rand::Rng;
 
-const RANGE_SCALE: f32 = 2.0;
+const RANGE_SCALE: f32 = 4.0;
 
 fn scale_range(range: f32) -> f32 {
 	range / RANGE_SCALE
@@ -155,7 +155,9 @@ impl Tower {
 }
 
 #[derive(Component)]
-pub struct TemporaryTower;
+pub struct TemporaryTower {
+	pub ui: Entity,
+}
 
 pub struct TowersPlugin;
 
@@ -169,6 +171,7 @@ fn spawn_tower_event_handler(
 	mut rock_placed: EventReader<RockPlacedEvent>,
 	mut update_range_scale: EventWriter<UpdateRangeIndicatorScaleEvent>,
 	towers_atlas_handle: Res<TowerAtlasHandle>,
+	asset_server: Res<AssetServer>,
 	mut cells: Query<&mut Cell>,
 ) {
 	if let Some(texture_atlas) = &towers_atlas_handle.handle {
@@ -182,6 +185,19 @@ fn spawn_tower_event_handler(
 			let transform = position_to_transform(cell.position.0 as f32, cell.position.1 as f32);
 			let tower = Tower::new(kind, rock.entity, cell.position);
 
+			let temporary_tower_ui = commands
+				.spawn_bundle(SpriteBundle {
+					sprite: Sprite {
+						color: Color::rgb(0.9, 0.1, 0.1),
+						custom_size: Some(Vec2::new(30.0, 30.0)),
+						..Default::default()
+					},
+					transform,
+					texture: asset_server.load("thick-circle.png"),
+					..Default::default()
+				})
+				.id();
+
 			let tower_id = commands
 				.spawn_bundle(SpriteSheetBundle {
 					texture_atlas: texture_atlas.clone(),
@@ -193,7 +209,9 @@ fn spawn_tower_event_handler(
 					..Default::default()
 				})
 				.insert(tower.clone())
-				.insert(TemporaryTower)
+				.insert(TemporaryTower {
+					ui: temporary_tower_ui,
+				})
 				.id();
 
 			cell.content = CellContent::Tower(tower_id);
@@ -224,7 +242,7 @@ fn clear_auras(mut query: Query<&mut Tower>) {
 
 fn set_auras(
 	mut query: Query<(&mut Tower, &Transform)>,
-	mut update_ui: EventWriter<UpdateUIEvent>,
+	mut update_ui: EventWriter<UpdateTowerTooltipEvent>,
 ) {
 	let mut combinations = query.iter_combinations_mut();
 	while let Some([(mut a, at), (mut b, bt)]) = combinations.fetch_next() {
@@ -232,7 +250,7 @@ fn set_auras(
 		for (value, range) in a.auras.attack_speed.iter() {
 			if flat_distance(*at, *bt) <= *range {
 				b.recieved_auras.attack_speed.push(*value);
-				update_ui.send(UpdateUIEvent {
+				update_ui.send(UpdateTowerTooltipEvent {
 					position: b.position,
 				});
 			}
@@ -240,7 +258,7 @@ fn set_auras(
 		for (value, range) in b.auras.attack_speed.iter() {
 			if flat_distance(*bt, *at) <= *range {
 				a.recieved_auras.attack_speed.push(*value);
-				update_ui.send(UpdateUIEvent {
+				update_ui.send(UpdateTowerTooltipEvent {
 					position: a.position,
 				});
 			}

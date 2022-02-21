@@ -38,9 +38,71 @@ enum AppState {
     Build,
     Select,
     Enemies,
+    GameOver,
 }
 
 struct MainPlugin;
+
+fn game_over(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    ui_root: Query<Entity, With<UiRoot>>,
+    sprites: Query<Entity, With<Sprite>>,
+    texture_sprites: Query<Entity, With<TextureAtlasSprite>>,
+) {
+    commands
+        .entity(ui_root.get_single().unwrap())
+        .despawn_recursive();
+
+    for sprite in sprites.iter() {
+        commands.entity(sprite).despawn_recursive();
+    }
+    for texture in texture_sprites.iter() {
+        commands.entity(texture).despawn_recursive();
+    }
+
+    let font = asset_server.load("FiraSans-Bold.ttf");
+    commands
+        .spawn_bundle(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                justify_content: JustifyContent::Center,
+                ..Default::default()
+            },
+            color: Color::NONE.into(),
+            ..Default::default()
+        })
+        .with_children(|parent| {
+            parent.spawn_bundle(TextBundle {
+                style: Style {
+                    align_self: AlignSelf::FlexEnd,
+                    ..Default::default()
+                },
+                text: Text {
+                    sections: vec![
+                        TextSection {
+                            value: "Game Over !\n\n".to_string(),
+                            style: TextStyle {
+                                font: font.clone(),
+                                font_size: 50.0,
+                                color: Color::WHITE,
+                            },
+                        },
+                        TextSection {
+                            value: "Press esc to exit.".to_string(),
+                            style: TextStyle {
+                                font,
+                                font_size: 30.0,
+                                color: Color::WHITE,
+                            },
+                        },
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+        });
+}
 
 impl Plugin for MainPlugin {
     fn build(&self, app: &mut App) {
@@ -53,6 +115,7 @@ impl Plugin for MainPlugin {
         .insert_resource(ClearColor(Color::rgb(0.12, 0.12, 0.12)))
         .add_state(AppState::Build)
         .add_startup_system(init_cameras)
+        .add_system_set(SystemSet::on_enter(AppState::GameOver).with_system(game_over))
         .add_system(bevy::input::system::exit_on_esc_system);
     }
 }

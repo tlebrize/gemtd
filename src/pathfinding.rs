@@ -50,9 +50,14 @@ pub struct Graph {
    positions: HashMap<(usize, usize), NodeId>,
    neighbors: HashMap<(Direction, NodeId), NodeId>,
    counter: NodeId,
-   pub path: Option<Vec<NodeId>>,
+   pub path: Vec<NodeId>,
    pub start: NodeId,
    pub end: NodeId,
+   pub checkpoint_1: NodeId,
+   pub checkpoint_2: NodeId,
+   pub checkpoint_3: NodeId,
+   pub checkpoint_4: NodeId,
+   pub checkpoint_5: NodeId,
 }
 
 impl Graph {
@@ -71,6 +76,17 @@ impl Graph {
          }
       }
       neighbors
+   }
+
+   fn all_checkpoints(&self) -> Vec<(NodeId, NodeId)> {
+      vec![
+         (self.start, self.checkpoint_1),
+         (self.checkpoint_1, self.checkpoint_2),
+         (self.checkpoint_2, self.checkpoint_3),
+         (self.checkpoint_3, self.checkpoint_4),
+         (self.checkpoint_4, self.checkpoint_5),
+         (self.checkpoint_5, self.end),
+      ]
    }
 
    pub fn add(&mut self, walkable: bool, x: usize, y: usize) -> NodeId {
@@ -125,14 +141,25 @@ impl Graph {
    }
 
    pub fn bfs(&mut self) -> bool {
+      self.path = vec![];
+      for (start, end) in self.all_checkpoints().iter() {
+         if !self.bfs_once(*start, *end) {
+            return false;
+         }
+      }
+      self.path.dedup();
+      true
+   }
+
+   pub fn bfs_once(&mut self, start: NodeId, end: NodeId) -> bool {
       let mut frontier = VecDeque::new();
       let mut came_from = HashMap::new();
-      frontier.push_back(self.start);
-      came_from.insert(self.start, None);
+      frontier.push_back(start);
+      came_from.insert(start, None);
 
       while !frontier.is_empty() {
          let current = frontier.pop_front().unwrap();
-         if current == self.end {
+         if current == end {
             break;
          }
 
@@ -145,8 +172,8 @@ impl Graph {
       }
 
       let mut path = vec![];
-      let mut current = self.end;
-      while current != self.start {
+      let mut current = end;
+      while current != start {
          path.push(current);
          if let Some(origin) = came_from.get(&current) {
             current = origin.unwrap();
@@ -154,8 +181,8 @@ impl Graph {
             return false;
          }
       }
-      path.push(self.start);
-      self.path = Some(path.into_iter().rev().collect());
+      path.push(start);
+      self.path.extend(path.iter().rev().cloned());
       true
    }
 
@@ -164,9 +191,8 @@ impl Graph {
    }
 
    pub fn next_step(&self, index: usize) -> Option<(usize, usize)> {
-      let path = self.path.as_ref().unwrap();
-      if path.len() > index + 1 {
-         self.get_node_position(path[index + 1])
+      if self.path.len() > index + 1 {
+         self.get_node_position(self.path[index + 1])
       } else {
          None
       }

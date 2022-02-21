@@ -43,7 +43,7 @@ impl Projectile {
 		ProjectileBundle {
 			projectile: Projectile {
 				target_enemy: Some(target),
-				lifetime: Duration::from_millis(500),
+				lifetime: Duration::from_millis(200),
 				damage: tower.damage,
 				target_position,
 				velocity,

@@ -1,13 +1,25 @@
-use crate::{position_to_transform, AppState, Tower, GRID_SIZE};
+use crate::{position_to_transform, Slime, Tower, GRID_SIZE};
 use bevy::prelude::*;
 
 const FONT_SIZE: f32 = 20.0;
 
 #[derive(Component)]
-pub struct Tooltip;
+pub struct TowerTooltip;
 
-pub struct UpdateUIEvent {
+#[derive(Component)]
+pub struct GameTooltip;
+
+#[derive(Component)]
+pub struct UiRoot;
+
+pub struct UpdateTowerTooltipEvent {
 	pub position: (usize, usize),
+}
+
+pub struct UpdateGameTooltipEvent {
+	pub slime: Option<Slime>,
+	pub level: u8,
+	pub lives: u8,
 }
 
 pub struct UpdateRangeIndicatorScaleEvent {
@@ -19,8 +31,6 @@ pub struct UpdateRangeIndicatorScaleEvent {
 struct RangeIndicator {
 	position: (usize, usize),
 }
-
-fn remove_old_range_indicators() {}
 
 fn update_range_indicator_scale(
 	mut update_scale: EventReader<UpdateRangeIndicatorScaleEvent>,
@@ -36,7 +46,7 @@ fn update_range_indicator_scale(
 }
 
 fn update_range_indicator_visibility(
-	mut update_ui: EventReader<UpdateUIEvent>,
+	mut update_ui: EventReader<UpdateTowerTooltipEvent>,
 	mut ranges: Query<(&RangeIndicator, &mut Visibility)>,
 ) {
 	for event in update_ui.iter() {
@@ -67,15 +77,15 @@ fn setup_range_indicators(mut commands: Commands, asset_server: Res<AssetServer>
 	}
 }
 
-fn update_tooltip_handler(
-	mut update_ui: EventReader<UpdateUIEvent>,
+fn update_tower_tooltip_handler(
+	mut update_ui: EventReader<UpdateTowerTooltipEvent>,
 	towers: Query<&Tower>,
-	mut tooltips: Query<&mut Text, With<Tooltip>>,
+	mut tower_tooltips: Query<&mut Text, With<TowerTooltip>>,
 ) {
 	for event in update_ui.iter() {
 		for tower in towers.iter() {
 			if tower.position == event.position {
-				let mut text = tooltips.get_single_mut().unwrap();
+				let mut text = tower_tooltips.get_single_mut().unwrap();
 				text.sections[1].value = format!("{:?}", tower.kind);
 				text.sections[3].value = format!("{:?}", tower.range);
 				text.sections[5].value = format!("{:?}", tower.damage);
@@ -86,117 +96,258 @@ fn update_tooltip_handler(
 	}
 }
 
+fn update_game_tooltip_handler(
+	mut update_tooltip: EventReader<UpdateGameTooltipEvent>,
+	mut game_tooltips: Query<&mut Text, With<GameTooltip>>,
+) {
+	for event in update_tooltip.iter() {
+		let mut text = game_tooltips.get_single_mut().unwrap();
+		text.sections[1].value = format!("{:?}", event.lives);
+		text.sections[3].value = format!("{:?}", event.level);
+		if let Some(slime) = &event.slime {
+			text.sections[5].value = format!("{:?}", slime.max_life);
+			text.sections[7].value = format!("{:?}", slime.armor);
+			text.sections[9].value = format!("{:?}", slime.magic_resistance);
+			text.sections[11].value = format!("{:?}", slime.speed);
+		}
+	}
+}
+
 fn setup_tooltip(mut commands: Commands, asset_server: Res<AssetServer>) {
 	let font = asset_server.load("FiraSans-Bold.ttf");
+
 	commands
-		.spawn_bundle(TextBundle {
+		.spawn_bundle(NodeBundle {
 			style: Style {
-				align_self: AlignSelf::FlexEnd,
+				size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+				justify_content: JustifyContent::SpaceBetween,
 				..Default::default()
 			},
-			text: Text {
-				sections: vec![
-					TextSection {
-						value: "Name: ".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::WHITE,
-						},
-					},
-					TextSection {
-						value: "".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::GOLD,
-						},
-					},
-					TextSection {
-						value: "\nRange:".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::WHITE,
-						},
-					},
-					TextSection {
-						value: "".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::GOLD,
-						},
-					},
-					TextSection {
-						value: "\nDamage:".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::WHITE,
-						},
-					},
-					TextSection {
-						value: "".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::GOLD,
-						},
-					},
-					TextSection {
-						value: "\nSpeed:".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::WHITE,
-						},
-					},
-					TextSection {
-						value: "".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::GOLD,
-						},
-					},
-					TextSection {
-						value: "\nAbilities:\n".to_string(),
-						style: TextStyle {
-							font: font.clone(),
-							font_size: FONT_SIZE,
-							color: Color::WHITE,
-						},
-					},
-					TextSection {
-						value: "".to_string(),
-						style: TextStyle {
-							font,
-							font_size: FONT_SIZE,
-							color: Color::GOLD,
-						},
-					},
-				],
-				..Default::default()
-			},
+			color: Color::NONE.into(),
 			..Default::default()
 		})
-		.insert(Tooltip);
+		.insert(UiRoot)
+		.with_children(|parent| {
+			parent
+				.spawn_bundle(TextBundle {
+					style: Style {
+						align_self: AlignSelf::FlexEnd,
+						..Default::default()
+					},
+					text: Text {
+						sections: vec![
+							TextSection {
+								value: "Name: ".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\nRange:".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\nDamage:".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\nSpeed:".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\nAbilities:\n".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+						],
+						..Default::default()
+					},
+					..Default::default()
+				})
+				.insert(TowerTooltip);
+
+			parent
+				.spawn_bundle(TextBundle {
+					style: Style {
+						align_self: AlignSelf::FlexEnd,
+						..Default::default()
+					},
+					text: Text {
+						sections: vec![
+							TextSection {
+								value: "Lives: ".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\n\nLevel: ".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\nLife: ".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\nArmor: ".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\nMagic Resistance: ".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+							TextSection {
+								value: "\nSpeed: ".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::WHITE,
+								},
+							},
+							TextSection {
+								value: "".to_string(),
+								style: TextStyle {
+									font: font.clone(),
+									font_size: FONT_SIZE,
+									color: Color::GOLD,
+								},
+							},
+						],
+						..Default::default()
+					},
+					..Default::default()
+				})
+				.insert(GameTooltip);
+		});
 }
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_event::<UpdateUIEvent>()
+		app.add_event::<UpdateTowerTooltipEvent>()
+			.add_event::<UpdateGameTooltipEvent>()
 			.add_event::<UpdateRangeIndicatorScaleEvent>()
 			.add_startup_system(setup_tooltip)
 			.add_startup_system(setup_range_indicators)
-			.add_system(update_tooltip_handler)
+			.add_system(update_game_tooltip_handler)
+			.add_system(update_tower_tooltip_handler)
 			.add_system(update_range_indicator_visibility)
-			.add_system(update_range_indicator_scale)
-			.add_system_set(
-				SystemSet::on_enter(AppState::Enemies).with_system(remove_old_range_indicators),
-			);
+			.add_system(update_range_indicator_scale);
 	}
 }

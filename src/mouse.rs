@@ -1,6 +1,6 @@
 use crate::{
 	fit_to_grid, vec2_to_position, AppState, Cell, CellContent, Game, Graph, NewPathEvent,
-	RockPlacedEvent, TemporaryTower, Tower, UpdateUIEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
+	RockPlacedEvent, TemporaryTower, Tower, UpdateTowerTooltipEvent, WINDOW_HEIGHT, WINDOW_WIDTH,
 };
 use bevy::input::{mouse::MouseButtonInput, ElementState};
 use bevy::prelude::*;
@@ -56,7 +56,7 @@ fn handle_mouse_events(
 
 fn handle_tooltip_hoover(
 	mouse: Res<MouseState>,
-	mut update_ui: EventWriter<UpdateUIEvent>,
+	mut update_ui: EventWriter<UpdateTowerTooltipEvent>,
 	game: Res<Game>,
 	cells: Query<&Cell>,
 ) {
@@ -64,7 +64,7 @@ fn handle_tooltip_hoover(
 		let entity = game.grid[y][x];
 		if let Ok(cell) = cells.get(entity) {
 			if let CellContent::Tower(_) = cell.content {
-				update_ui.send(UpdateUIEvent {
+				update_ui.send(UpdateTowerTooltipEvent {
 					position: cell.position,
 				});
 			}
@@ -88,12 +88,12 @@ fn handle_build_click(
 				if cell.content == CellContent::Empty {
 					cell.content = CellContent::Rock;
 					graph.set_node_walkability(cell.node_id, false);
-				} else {
+				} else if cell.content != CellContent::Rock {
 					return;
 				}
 
 				if graph.bfs() {
-					new_path.send(NewPathEvent(graph.path.as_ref().unwrap().to_vec()));
+					new_path.send(NewPathEvent(graph.path.to_vec()));
 					rock_placed.send(RockPlacedEvent { entity });
 				} else {
 					cell.content = CellContent::Empty;
@@ -108,7 +108,7 @@ fn handle_select_click(
 	mut commands: Commands,
 	mut mouse: ResMut<MouseState>,
 	game: Res<Game>,
-	mut temporary_towers: Query<(Entity, &Tower), With<TemporaryTower>>,
+	mut temporary_towers: Query<(Entity, &Tower, &TemporaryTower)>,
 	mut cells: Query<&mut Cell>,
 	mut app_state: ResMut<State<AppState>>,
 ) {
@@ -116,14 +116,15 @@ fn handle_select_click(
 		mouse.pressed_read = true;
 		let mut found = false;
 		if let Some((x, y)) = fit_to_grid(vec2_to_position(mouse.position)) {
-			for (_, tower) in temporary_towers.iter_mut() {
+			for (_, tower, _) in temporary_towers.iter_mut() {
 				if tower.position == (x, y) {
 					found = true;
 				}
 			}
 
 			if found {
-				for (entity, tower) in temporary_towers.iter_mut() {
+				for (entity, tower, temporary) in temporary_towers.iter_mut() {
+					commands.entity(temporary.ui).despawn_recursive();
 					if tower.position == (x, y) {
 						commands.entity(entity).remove::<TemporaryTower>();
 					} else {

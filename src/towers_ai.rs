@@ -11,15 +11,18 @@ fn attack_speed(speed: f32) -> Duration {
 
 fn towers_targeting(
 	mut towers: Query<(&mut Tower, &Transform), Without<TemporaryTower>>,
-	slimes: Query<(Entity, &Transform), With<Slime>>,
+	slimes: Query<(Entity, &Transform, &Slime)>,
 ) {
+	let mut slimes_vec: Vec<(Entity, &Transform, &Slime)> = slimes.iter().collect();
+	slimes_vec.sort_by(|a, b| a.2.rank.cmp(&b.2.rank));
+
 	for (mut tower, tower_transform) in towers.iter_mut() {
 		tower.targets = vec![];
-		for (slime_entity, slime_transform) in slimes.iter() {
-			if flat_distance(*tower_transform, *slime_transform) < tower.range
+		for (slime_entity, slime_transform, _) in slimes_vec.iter() {
+			if flat_distance(*tower_transform, **slime_transform) < tower.range
 				&& tower.targets.len() < tower.modifiers.get_target_count()
 			{
-				tower.targets.push(slime_entity);
+				tower.targets.push(*slime_entity);
 			}
 		}
 	}

@@ -12,6 +12,11 @@ pub enum CellContent {
 	End,
 	Rock,
 	Tower(Entity),
+	CheckPoint1,
+	CheckPoint2,
+	CheckPoint3,
+	CheckPoint4,
+	CheckPoint5,
 }
 
 #[derive(Component)]
@@ -26,10 +31,12 @@ pub struct Game {
 	pub grid: Vec<Vec<Entity>>,
 	pub rocks_count: u8,
 	pub lives: u8,
+	pub level: u8,
 }
 
 fn init_game(mut commands: Commands, mut game: ResMut<Game>, mut graph: ResMut<Graph>) {
 	game.lives = 10;
+	game.level = 0;
 
 	let size = GRID_SIZE as usize;
 	for y in 0..size {
@@ -37,10 +44,20 @@ fn init_game(mut commands: Commands, mut game: ResMut<Game>, mut graph: ResMut<G
 		for x in 0..size {
 			let (content, color, walkable) = if x == 0 || y == 0 || x == size - 1 || y == size - 1 {
 				(CellContent::Limit, Color::WHITE, false)
-			} else if x == 1 && y == 1 {
+			} else if x == 2 && y == 2 {
 				(CellContent::Start, Color::GREEN, true)
-			} else if x == size - 2 && y == size - 2 {
+			} else if x == size - 3 && y == size - 3 {
 				(CellContent::End, Color::RED, true)
+			} else if x == 2 && y == ((size - 1) / 2) {
+				(CellContent::CheckPoint1, Color::BLUE, true)
+			} else if x == size - 3 && y == ((size - 1) / 2) {
+				(CellContent::CheckPoint2, Color::BLUE, true)
+			} else if x == size - 3 && y == 2 {
+				(CellContent::CheckPoint3, Color::BLUE, true)
+			} else if x == ((size - 1) / 2) && y == 2 {
+				(CellContent::CheckPoint4, Color::BLUE, true)
+			} else if x == ((size - 1) / 2) && y == size - 3 {
+				(CellContent::CheckPoint5, Color::BLUE, true)
 			} else {
 				(CellContent::Empty, Color::BLACK, true)
 			};
@@ -70,6 +87,11 @@ fn init_game(mut commands: Commands, mut game: ResMut<Game>, mut graph: ResMut<G
 			match content {
 				CellContent::Start => graph.start = node_id,
 				CellContent::End => graph.end = node_id,
+				CellContent::CheckPoint1 => graph.checkpoint_1 = node_id,
+				CellContent::CheckPoint2 => graph.checkpoint_2 = node_id,
+				CellContent::CheckPoint3 => graph.checkpoint_3 = node_id,
+				CellContent::CheckPoint4 => graph.checkpoint_4 = node_id,
+				CellContent::CheckPoint5 => graph.checkpoint_5 = node_id,
 				_ => {}
 			}
 		}
@@ -84,7 +106,8 @@ fn update_cell_sprites(mut query: Query<(&Cell, &mut Sprite)>) {
 			CellContent::End => sprite.color = Color::RED,
 			CellContent::Rock => sprite.color = Color::GRAY,
 			CellContent::Tower(_) => sprite.color = Color::GRAY,
-			_ => {}
+			CellContent::Empty => {}
+			_ => sprite.color = Color::BLUE, // only checkpoints.
 		}
 	}
 }
